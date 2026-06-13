@@ -1,31 +1,34 @@
 import SwiftUI
 import AppKit
-import Luminare
 
-/// The dropdown content rendered by MenuBarExtra (.window style), styled with
-/// the Luminare design system (rounded bordered sections, material fills,
-/// hover-highlighted cells — the "Loop" aesthetic).
+/// The dropdown content rendered by MenuBarExtra (.window style), styled after
+/// GitHub's Primer design language: flat bordered list-groups, Primer palette,
+/// state dots and label pills. Adapts to light/dark via the resolved palette.
 struct MenuView: View {
     @EnvironmentObject var state: AppState
+    @Environment(\.colorScheme) private var scheme
     @State private var showingSettings = false
+
+    private var p: PrimerPalette { PrimerPalette.resolve(scheme) }
 
     var body: some View {
         VStack(spacing: 0) {
             HeaderBar(showingSettings: $showingSettings)
-            Divider().opacity(0.5)
+            Divider().overlay(p.border)
 
             if showingSettings || !state.hasToken {
                 SettingsView(showingSettings: $showingSettings)
-                    .frame(maxHeight: 460)
+                    .frame(maxHeight: 470)
             } else {
                 content
             }
 
-            Divider().opacity(0.5)
+            Divider().overlay(p.border)
             FooterBar()
         }
         .frame(width: Theme.width)
-        .luminareTint(overridingWith: Theme.brand)
+        .background(p.bg)
+        .environment(\.primer, p)
     }
 
     @ViewBuilder
@@ -38,7 +41,7 @@ struct MenuView: View {
             )
         } else {
             ScrollView {
-                VStack(alignment: .leading, spacing: 10) {
+                VStack(alignment: .leading, spacing: 14) {
                     if !state.respondedPRs.isEmpty {
                         YourPRsGroup(items: state.respondedPRs)
                     }
@@ -46,7 +49,7 @@ struct MenuView: View {
                         RepoGroup(repoResult: repoResult)
                     }
                 }
-                .padding(10)
+                .padding(.vertical, 12)
             }
             .frame(maxHeight: 480)
         }
@@ -57,171 +60,163 @@ struct MenuView: View {
 
 private struct HeaderBar: View {
     @EnvironmentObject var state: AppState
+    @Environment(\.primer) private var p
     @Binding var showingSettings: Bool
 
     var body: some View {
-        HStack(spacing: 9) {
+        HStack(spacing: 8) {
             LogoMark()
             Text("PR Bar")
-                .font(.system(size: 14, weight: .bold, design: .rounded))
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(p.fg)
 
             if state.reviewRequestedTotal > 0 {
-                StatPill(count: state.reviewRequestedTotal, text: "to review",
-                         fill: AnyShapeStyle(Theme.brandGradient), glow: Theme.brand)
-                    .transition(.scale.combined(with: .opacity))
+                CounterPill(count: state.reviewRequestedTotal, text: "to review", tint: p.accent)
             }
             if !state.respondedPRs.isEmpty {
-                StatPill(count: state.respondedPRs.count, text: "responded",
-                         fill: AnyShapeStyle(Theme.responseGradient), glow: Theme.success)
-                    .transition(.scale.combined(with: .opacity))
+                CounterPill(count: state.respondedPRs.count, text: "responded", tint: p.success)
             }
 
             Spacer(minLength: 4)
 
             if state.isRefreshing {
-                ProgressView().controlSize(.small).frame(width: 22, height: 22)
+                ProgressView().controlSize(.small).frame(width: 28, height: 28)
             } else {
-                IconButton(symbol: "arrow.clockwise", help: "Refresh now") {
+                PrimerIconButton(symbol: "arrow.clockwise", help: "Refresh now") {
                     Task { await state.refresh() }
                 }
             }
-            IconButton(
-                symbol: showingSettings ? "chevron.backward" : "gearshape.fill",
+            PrimerIconButton(
+                symbol: showingSettings ? "chevron.backward" : "gearshape",
                 help: showingSettings ? "Back" : "Settings"
             ) {
                 withAnimation(.easeInOut(duration: 0.18)) { showingSettings.toggle() }
             }
         }
-        .padding(.horizontal, 13)
+        .padding(.horizontal, 14)
         .padding(.vertical, 11)
-        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: state.attentionTotal)
+        .background(p.canvas)
     }
 }
 
 private struct LogoMark: View {
+    @Environment(\.primer) private var p
     var body: some View {
         RoundedRectangle(cornerRadius: 6, style: .continuous)
-            .fill(Theme.brandGradient)
-            .frame(width: 22, height: 22)
+            .fill(p.fg)
+            .frame(width: 20, height: 20)
             .overlay(
                 Image(systemName: "checklist")
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(.white)
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(p.bg)
             )
-            .shadow(color: Theme.brand.opacity(0.4), radius: 3, y: 1)
     }
 }
 
-private struct StatPill: View {
+/// A Primer "Counter"-style bordered pill.
+private struct CounterPill: View {
+    @Environment(\.primer) private var p
     let count: Int
     let text: String
-    let fill: AnyShapeStyle
-    let glow: Color
+    let tint: Color
 
     var body: some View {
-        HStack(spacing: 3) {
+        HStack(spacing: 4) {
             Text("\(count)")
-                .font(.system(size: 11, weight: .bold, design: .monospaced))
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(tint)
+                .monospacedDigit()
             Text(text)
-                .font(.system(size: 11, weight: .medium))
+                .font(.system(size: 11))
+                .foregroundStyle(p.muted)
         }
-        .foregroundStyle(.white)
         .padding(.horizontal, 7)
         .padding(.vertical, 2)
-        .background(fill, in: Capsule())
-        .shadow(color: glow.opacity(0.35), radius: 3, y: 1)
+        .background(p.bg, in: Capsule())
+        .overlay(Capsule().strokeBorder(p.border, lineWidth: 1))
     }
 }
 
-// MARK: - Groups (repo + your PRs)
+// MARK: - Groups
 
 private struct RepoGroup: View {
     @EnvironmentObject var state: AppState
+    @Environment(\.primer) private var p
     let repoResult: RepoPRs
 
     private var collapsed: Bool { state.isCollapsed(repoResult.repo) }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 5) {
+        VStack(alignment: .leading, spacing: 6) {
             GroupHeader(
                 icon: "shippingbox.fill",
-                iconTint: .secondary,
                 title: repoResult.repo.slug,
-                titleMonospaced: true,
                 reviewCount: repoResult.reviewRequestedCount,
-                trailingCount: collapsed && repoResult.error == nil ? repoResult.pullRequests.count : nil,
+                trailingText: collapsed && repoResult.error == nil ? "\(repoResult.pullRequests.count) open" : nil,
                 collapsed: collapsed
             ) {
-                withAnimation(.spring(response: 0.32, dampingFraction: 0.82)) {
-                    state.toggleCollapsed(repoResult.repo)
-                }
+                withAnimation(.easeInOut(duration: 0.18)) { state.toggleCollapsed(repoResult.repo) }
             }
 
             if !collapsed {
                 if let error = repoResult.error {
-                    InlineNote(text: error, symbol: "exclamationmark.triangle.fill", tint: Theme.failure)
+                    InlineNote(text: error, symbol: "exclamationmark.triangle.fill", tint: p.danger)
                 } else if repoResult.pullRequests.isEmpty {
-                    InlineNote(text: "No open pull requests", symbol: "checkmark.circle", tint: .secondary)
+                    InlineNote(text: "No open pull requests", symbol: "checkmark.circle", tint: p.muted)
                 } else {
-                    LuminareSection {
-                        ForEach(repoResult.pullRequests) { pr in
-                            Button { open(pr.url) } label: { RepoPRRow(pr: pr) }
-                                .buttonStyle(.luminare)
+                    ListGroup {
+                        ForEach(Array(repoResult.pullRequests.enumerated()), id: \.element.id) { i, pr in
+                            if i > 0 { RowDivider() }
+                            PRRowButton(url: pr.url) { RepoPRRow(pr: pr) }
                         }
                     }
-                    .luminareMinHeight(34)
                 }
             }
         }
+        .padding(.horizontal, 12)
     }
 }
 
 private struct YourPRsGroup: View {
     @EnvironmentObject var state: AppState
+    @Environment(\.primer) private var p
     let items: [AttentionPR]
 
     private let sectionID = "__your_prs__"
     private var collapsed: Bool { state.isCollapsed(id: sectionID) }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 5) {
+        VStack(alignment: .leading, spacing: 6) {
             GroupHeader(
-                icon: "person.crop.circle.badge.checkmark",
-                iconTint: Theme.success,
-                title: "YOUR PRS",
-                titleMonospaced: false,
+                icon: "person.crop.circle",
+                title: "Your pull requests",
                 reviewCount: 0,
-                trailingCount: items.count,
-                trailingTint: Theme.success,
+                trailingText: "\(items.count)",
                 collapsed: collapsed
             ) {
-                withAnimation(.spring(response: 0.32, dampingFraction: 0.82)) {
-                    state.toggleCollapsed(id: sectionID)
-                }
+                withAnimation(.easeInOut(duration: 0.18)) { state.toggleCollapsed(id: sectionID) }
             }
 
             if !collapsed {
-                LuminareSection {
-                    ForEach(items) { item in
-                        Button { open(item.pr.url) } label: { MyPRRow(item: item) }
-                            .buttonStyle(.luminare)
+                ListGroup {
+                    ForEach(Array(items.enumerated()), id: \.element.id) { i, item in
+                        if i > 0 { RowDivider() }
+                        PRRowButton(url: item.pr.url) { MyPRRow(item: item) }
                     }
                 }
-                .luminareMinHeight(34)
             }
         }
+        .padding(.horizontal, 12)
     }
 }
 
-/// Shared collapsible header for both group kinds.
+/// A collapsible section header in Primer's bold/muted style.
 private struct GroupHeader: View {
+    @Environment(\.primer) private var p
     let icon: String
-    let iconTint: Color
     let title: String
-    let titleMonospaced: Bool
     var reviewCount: Int = 0
-    var trailingCount: Int? = nil
-    var trailingTint: Color = .secondary
+    var trailingText: String? = nil
     let collapsed: Bool
     let toggle: () -> Void
 
@@ -232,192 +227,188 @@ private struct GroupHeader: View {
             HStack(spacing: 6) {
                 Image(systemName: "chevron.right")
                     .font(.system(size: 9, weight: .bold))
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(p.muted)
                     .rotationEffect(.degrees(collapsed ? 0 : 90))
                 Image(systemName: icon)
-                    .font(.system(size: 10))
-                    .foregroundStyle(iconTint)
+                    .font(.system(size: 11))
+                    .foregroundStyle(p.muted)
                 Text(title)
-                    .font(.system(size: titleMonospaced ? 11.5 : 11,
-                                  weight: titleMonospaced ? .semibold : .bold,
-                                  design: titleMonospaced ? .monospaced : .default))
-                    .tracking(titleMonospaced ? 0 : 0.4)
-                    .foregroundStyle(.secondary)
+                    .font(.system(size: 12.5, weight: .semibold))
+                    .foregroundStyle(hovering ? p.accent : p.fg)
                     .lineLimit(1)
                     .truncationMode(.middle)
                 Spacer(minLength: 4)
                 if reviewCount > 0 {
-                    CountChip(count: reviewCount, tint: Theme.brand)
+                    LabelPill(text: "\(reviewCount) for you", color: p.accent)
                 }
-                if let trailingCount {
-                    CountChip(count: trailingCount, tint: trailingTint, soft: true)
+                if let trailingText {
+                    Text(trailingText)
+                        .font(.system(size: 11))
+                        .foregroundStyle(p.muted)
+                        .monospacedDigit()
                 }
             }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 5)
-            .background(Color.primary.opacity(hovering ? 0.06 : 0),
-                        in: RoundedRectangle(cornerRadius: 6, style: .continuous))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .onHover { hovering = $0 }
-        .animation(.easeOut(duration: 0.12), value: hovering)
     }
 }
 
-private struct CountChip: View {
-    let count: Int
-    let tint: Color
-    var soft: Bool = false
+/// A bordered, rounded Primer list-group container.
+private struct ListGroup<Content: View>: View {
+    @Environment(\.primer) private var p
+    @ViewBuilder var content: Content
 
     var body: some View {
-        Text("\(count)")
-            .font(.system(size: 10, weight: .bold, design: .monospaced))
-            .foregroundStyle(soft ? AnyShapeStyle(.tertiary) : AnyShapeStyle(tint))
-            .padding(.horizontal, 6)
-            .padding(.vertical, 1.5)
-            .background(soft ? Color.clear : tint.opacity(0.15), in: Capsule())
+        VStack(spacing: 0) { content }
+            .background(p.bg)
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .strokeBorder(p.border, lineWidth: 1)
+            )
+    }
+}
+
+private struct RowDivider: View {
+    @Environment(\.primer) private var p
+    var body: some View { Rectangle().fill(p.border).frame(height: 1) }
+}
+
+/// One list-group row, tappable, with a Primer hover fill.
+private struct PRRowButton<Content: View>: View {
+    @Environment(\.primer) private var p
+    let url: String
+    @ViewBuilder var content: Content
+    @State private var hovering = false
+
+    var body: some View {
+        Button { open(url) } label: {
+            content
+                .padding(.horizontal, 12)
+                .padding(.vertical, 9)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(hovering ? p.canvas : p.bg)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
     }
 }
 
 // MARK: - Rows
 
 private struct RepoPRRow: View {
+    @Environment(\.primer) private var p
     let pr: PullRequest
 
     var body: some View {
-        HStack(alignment: .center, spacing: 10) {
-            StatusDot(status: pr.checkStatus)
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 5) {
-                    if pr.reviewRequestedFromMe { ReviewTag() }
-                    Text(pr.title)
-                        .font(.system(size: 12.5, weight: pr.reviewRequestedFromMe ? .semibold : .regular))
-                        .lineLimit(1)
-                }
-                HStack(spacing: 7) {
-                    PRNumber(pr.number)
-                    Label("@\(pr.author)", systemImage: "person.fill")
-                        .labelStyle(CompactLabel())
-                        .font(.system(size: 10.5))
-                        .foregroundStyle(.secondary)
-                    ReviewBadge(state: pr.reviewState)
+        HStack(alignment: .top, spacing: 9) {
+            StateIcon(status: pr.checkStatus).padding(.top, 1)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(pr.title)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(p.fg)
+                    .lineLimit(1)
+                HStack(spacing: 6) {
+                    Text("#\(pr.number)")
+                        .font(.system(size: 12))
+                        .foregroundStyle(p.muted)
+                        .monospacedDigit()
+                    Text("@\(pr.author)")
+                        .font(.system(size: 12))
+                        .foregroundStyle(p.muted)
+                    if pr.reviewRequestedFromMe {
+                        LabelPill(text: "review requested", color: p.accent)
+                    } else if let label = pr.reviewState.label {
+                        LabelPill(text: label, color: pr.reviewState.color(p),
+                                  leadingSymbol: pr.reviewState == .approved ? "checkmark" : nil)
+                    }
                 }
             }
             Spacer(minLength: 0)
-            OpenArrow()
         }
-        .padding(.vertical, 3)
     }
 }
 
 private struct MyPRRow: View {
+    @Environment(\.primer) private var p
     let item: AttentionPR
     private var pr: PullRequest { item.pr }
     private var approved: Bool { pr.reviewState == .approved }
 
     var body: some View {
-        HStack(alignment: .center, spacing: 10) {
-            StatusDot(status: pr.checkStatus)
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 5) {
-                    TagLabel(
-                        text: approved ? "APPROVED" : "CHANGES",
-                        fill: AnyShapeStyle(approved ? Theme.responseGradient : Theme.changesGradient)
-                    )
-                    Text(pr.title)
-                        .font(.system(size: 12.5, weight: .semibold))
-                        .lineLimit(1)
-                }
-                HStack(spacing: 7) {
-                    PRNumber(pr.number)
-                    Label(item.repo.slug, systemImage: "shippingbox")
-                        .labelStyle(CompactLabel())
-                        .font(.system(size: 10.5, design: .monospaced))
-                        .foregroundStyle(.secondary)
+        HStack(alignment: .top, spacing: 9) {
+            Image(systemName: approved ? "checkmark.circle.fill" : "arrow.triangle.2.circlepath")
+                .font(.system(size: 12))
+                .foregroundStyle(approved ? p.success : p.danger)
+                .padding(.top, 1)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(pr.title)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(p.fg)
+                    .lineLimit(1)
+                HStack(spacing: 6) {
+                    Text("#\(pr.number)")
+                        .font(.system(size: 12))
+                        .foregroundStyle(p.muted)
+                        .monospacedDigit()
+                    Text(item.repo.slug)
+                        .font(.system(size: 12))
+                        .foregroundStyle(p.muted)
                         .lineLimit(1)
                         .truncationMode(.middle)
+                    LabelPill(text: approved ? "approved" : "changes requested",
+                              color: approved ? p.success : p.danger,
+                              leadingSymbol: approved ? "checkmark" : nil)
                 }
             }
             Spacer(minLength: 0)
-            OpenArrow()
         }
-        .padding(.vertical, 3)
     }
 }
 
-private struct PRNumber: View {
-    let number: Int
-    init(_ number: Int) { self.number = number }
-    var body: some View {
-        Text("#\(number)")
-            .font(.system(size: 10.5, weight: .medium, design: .monospaced))
-            .foregroundStyle(Theme.brand.opacity(0.85))
-    }
-}
-
-private struct OpenArrow: View {
-    var body: some View {
-        Image(systemName: "arrow.up.forward")
-            .font(.system(size: 10, weight: .semibold))
-            .foregroundStyle(.tertiary)
-    }
-}
-
-private struct StatusDot: View {
+/// CI status dot, GitHub-style filled circle; pulses while running.
+private struct StateIcon: View {
+    @Environment(\.primer) private var p
     let status: CheckStatus
     var body: some View {
         Image(systemName: status == .none ? "circle" : "circle.fill")
-            .font(.system(size: 8, weight: .black))
-            .foregroundStyle(status.color)
-            .shadow(color: status == .none ? .clear : status.color.opacity(0.6), radius: 2.5)
+            .font(.system(size: 9, weight: .black))
+            .foregroundStyle(status.color(p))
             .symbolEffect(.pulse, options: .repeating, isActive: status == .pending)
             .help(status.help)
+            .frame(width: 14, alignment: .center)
     }
 }
 
-private struct TagLabel: View {
+/// A GitHub Label: colored text in a translucent rounded pill with a thin border.
+private struct LabelPill: View {
     let text: String
-    let fill: AnyShapeStyle
+    let color: Color
+    var leadingSymbol: String? = nil
+
     var body: some View {
-        Text(text)
-            .font(.system(size: 8.5, weight: .heavy))
-            .tracking(0.5)
-            .foregroundStyle(.white)
-            .padding(.horizontal, 4)
-            .padding(.vertical, 1.5)
-            .background(fill, in: RoundedRectangle(cornerRadius: 3, style: .continuous))
-    }
-}
-
-private struct ReviewTag: View {
-    var body: some View { TagLabel(text: "REVIEW", fill: AnyShapeStyle(Theme.brandGradient)) }
-}
-
-private struct ReviewBadge: View {
-    let state: ReviewState
-    var body: some View {
-        if let label = state.label, let symbol = state.symbol {
-            Label(label, systemImage: symbol)
-                .labelStyle(CompactLabel())
-                .font(.system(size: 10.5, weight: .medium))
-                .foregroundStyle(state.color)
+        HStack(spacing: 3) {
+            if let leadingSymbol {
+                Image(systemName: leadingSymbol).font(.system(size: 8, weight: .bold))
+            }
+            Text(text).font(.system(size: 11, weight: .medium))
         }
-    }
-}
-
-private struct CompactLabel: LabelStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        HStack(spacing: 2.5) {
-            configuration.icon
-            configuration.title
-        }
+        .foregroundStyle(color)
+        .padding(.horizontal, 6)
+        .padding(.vertical, 1)
+        .background(color.opacity(0.13), in: Capsule())
+        .overlay(Capsule().strokeBorder(color.opacity(0.35), lineWidth: 1))
     }
 }
 
 // MARK: - Chrome
 
-private struct IconButton: View {
+/// A Primer "IconButton" — bordered square with subtle hover.
+private struct PrimerIconButton: View {
+    @Environment(\.primer) private var p
     let symbol: String
     let help: String
     let action: () -> Void
@@ -427,19 +418,23 @@ private struct IconButton: View {
         Button(action: action) {
             Image(systemName: symbol)
                 .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(hovering ? Theme.brand : .secondary)
-                .frame(width: 22, height: 22)
-                .background(Circle().fill(Color.primary.opacity(hovering ? 0.08 : 0)))
-                .contentShape(Circle())
+                .foregroundStyle(p.muted)
+                .frame(width: 28, height: 28)
+                .background(hovering ? p.canvas : p.bg)
+                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .strokeBorder(p.border, lineWidth: 1)
+                )
         }
         .buttonStyle(.plain)
         .onHover { hovering = $0 }
-        .animation(.easeOut(duration: 0.12), value: hovering)
         .help(help)
     }
 }
 
 private struct EmptyState: View {
+    @Environment(\.primer) private var p
     let icon: String
     let title: String
     let subtitle: String
@@ -447,11 +442,11 @@ private struct EmptyState: View {
         VStack(spacing: 10) {
             Image(systemName: icon)
                 .font(.system(size: 30, weight: .light))
-                .foregroundStyle(Theme.brand.opacity(0.7))
-            Text(title).font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(p.muted)
+            Text(title).font(.system(size: 13, weight: .semibold)).foregroundStyle(p.fg)
             Text(subtitle)
                 .font(.system(size: 11))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(p.muted)
                 .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)
@@ -461,45 +456,59 @@ private struct EmptyState: View {
 }
 
 private struct InlineNote: View {
+    @Environment(\.primer) private var p
     let text: String
     let symbol: String
     let tint: Color
     var body: some View {
         HStack(spacing: 6) {
-            Image(systemName: symbol).font(.system(size: 10))
-            Text(text).font(.system(size: 11)).lineLimit(2)
+            Image(systemName: symbol).font(.system(size: 11))
+            Text(text).font(.system(size: 12)).lineLimit(2)
         }
         .foregroundStyle(tint)
-        .padding(.horizontal, 10)
-        .padding(.vertical, 4)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(p.bg)
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(p.border, lineWidth: 1))
     }
 }
 
 private struct FooterBar: View {
     @EnvironmentObject var state: AppState
+    @Environment(\.primer) private var p
+    @State private var hovering = false
+
     var body: some View {
         HStack {
             if let updated = state.lastUpdated {
                 Label(updated.formatted(date: .omitted, time: .shortened), systemImage: "clock")
                     .labelStyle(CompactLabel())
-                    .font(.system(size: 10.5))
-                    .foregroundStyle(.tertiary)
+                    .font(.system(size: 11))
+                    .foregroundStyle(p.muted)
             } else {
-                Text("Not yet refreshed")
-                    .font(.system(size: 10.5))
-                    .foregroundStyle(.tertiary)
+                Text("Not yet refreshed").font(.system(size: 11)).foregroundStyle(p.muted)
             }
             Spacer()
             Button { NSApplication.shared.terminate(nil) } label: {
                 Text("Quit")
                     .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(hovering ? p.accent : p.muted)
             }
             .buttonStyle(.plain)
+            .onHover { hovering = $0 }
             .help("Quit PR Bar")
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 8)
+        .background(p.canvas)
+    }
+}
+
+private struct CompactLabel: LabelStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        HStack(spacing: 3) { configuration.icon; configuration.title }
     }
 }
 

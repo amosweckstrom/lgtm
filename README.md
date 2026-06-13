@@ -23,11 +23,9 @@ browser.
 ## Requirements
 
 - macOS 14+
-- Full **Xcode** for building (not just Command Line Tools). The UI uses the
-  [Luminare](https://github.com/MrKai77/Luminare) SwiftUI library, which relies
-  on the `@Entry`/`#Preview` Swift macros whose compiler plugins ship only with
-  the Xcode toolchain. After installing Xcode:
-  `sudo xcode-select -s /Applications/Xcode.app/Contents/Developer`
+- Swift toolchain (Command Line Tools or Xcode) for building. The UI is pure
+  SwiftUI with no third-party dependencies, styled after GitHub's Primer design
+  language and adapting to light/dark appearance.
 - A GitHub Personal Access Token with read access to the repos you track
   (classic: `repo` scope; fine-grained: read-only Pull requests + Contents)
 
@@ -58,9 +56,9 @@ Sources/PRBar/
   Keychain.swift     – PAT storage
   LoginItem.swift    – launch-at-login via SMAppService
   Models.swift       – PR / repo / status types
-  Theme.swift        – design tokens (palette, gradients) layered on Luminare
-  MenuView.swift     – dropdown UI (Luminare sections + rows)
-  SettingsView.swift – token + repo management (Luminare sections)
+  Theme.swift        – GitHub Primer palette (light/dark) + state colors
+  MenuView.swift     – dropdown UI (Primer list-groups + label pills)
+  SettingsView.swift – token + repo management (Primer sections)
 bundle/
   Info.plist         – app bundle metadata (LSUIElement)
   PRBar.entitlements – network + non-sandboxed
