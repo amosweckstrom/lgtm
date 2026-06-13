@@ -11,109 +11,237 @@ struct SettingsView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
-                tokenSection
-                Divider()
-                reposSection
-                Divider()
-                optionsSection
+            VStack(alignment: .leading, spacing: 12) {
+                tokenCard
+                reposCard
+                optionsCard
             }
-            .padding(12)
+            .padding(13)
         }
     }
 
-    private var tokenSection: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Label("GitHub token", systemImage: "key.fill")
-                .font(.subheadline.weight(.semibold))
+    // MARK: Token
 
+    private var tokenCard: some View {
+        SettingsCard(title: "GitHub Token", symbol: "key.fill") {
             if state.hasToken {
-                HStack {
-                    Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
-                    Text("Token saved in Keychain")
-                        .font(.caption)
-                    Spacer()
-                    Button("Remove") { state.clearToken() }
-                        .font(.caption)
-                }
-            } else {
-                Text("Paste a fine-grained or classic PAT with `repo` (read) scope.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                HStack {
-                    SecureField("ghp_…", text: $tokenInput)
-                        .textFieldStyle(.roundedBorder)
-                    Button("Save") {
-                        state.setToken(tokenInput)
-                        tokenInput = ""
-                    }
-                    .disabled(tokenInput.trimmingCharacters(in: .whitespaces).isEmpty)
-                }
-            }
-        }
-    }
-
-    private var reposSection: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Label("Repositories", systemImage: "folder.fill")
-                .font(.subheadline.weight(.semibold))
-
-            if state.repos.isEmpty {
-                Text("No repos tracked yet.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            } else {
-                ForEach(state.repos) { repo in
-                    HStack {
-                        Text(repo.slug).font(.caption)
-                        Spacer()
-                        Button {
-                            state.removeRepo(repo)
-                        } label: {
-                            Image(systemName: "trash")
-                        }
-                        .buttonStyle(.plain)
+                HStack(spacing: 7) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(Theme.success)
+                    Text("Connected")
+                        .font(.system(size: 12, weight: .medium))
+                    Text("stored in Keychain")
+                        .font(.system(size: 11))
                         .foregroundStyle(.secondary)
+                    Spacer()
+                    Button("Remove", role: .destructive) { state.clearToken() }
+                        .buttonStyle(.plain)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(Theme.failure)
+                }
+            } else {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Paste a token with read access to the repos you track.")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    HStack(spacing: 8) {
+                        SecureField("ghp_…", text: $tokenInput)
+                            .textFieldStyle(.roundedBorder)
+                            .font(.system(size: 12, design: .monospaced))
+                            .onSubmit(saveToken)
+                        Button("Save", action: saveToken)
+                            .buttonStyle(BrandButton())
+                            .disabled(tokenIsEmpty)
                     }
                 }
-            }
-
-            HStack {
-                TextField("owner", text: $newOwner)
-                    .textFieldStyle(.roundedBorder)
-                Text("/").foregroundStyle(.secondary)
-                TextField("repo", text: $newName)
-                    .textFieldStyle(.roundedBorder)
-                Button("Add") {
-                    state.addRepo(owner: newOwner, name: newName)
-                    newOwner = ""
-                    newName = ""
-                }
-                .disabled(newOwner.trimmingCharacters(in: .whitespaces).isEmpty
-                          || newName.trimmingCharacters(in: .whitespaces).isEmpty)
             }
         }
     }
 
-    private var optionsSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Toggle("Launch at login", isOn: Binding(
-                get: { state.launchAtLogin },
-                set: { state.setLaunchAtLogin($0) }
-            ))
-            .font(.caption)
+    private var tokenIsEmpty: Bool {
+        tokenInput.trimmingCharacters(in: .whitespaces).isEmpty
+    }
 
-            if let error = state.lastError {
-                Text(error)
-                    .font(.caption2)
-                    .foregroundStyle(.red)
-                    .lineLimit(3)
-            }
+    private func saveToken() {
+        guard !tokenIsEmpty else { return }
+        state.setToken(tokenInput)
+        tokenInput = ""
+    }
 
-            if state.hasToken {
-                Button("Done") { showingSettings = false }
-                    .font(.caption)
+    // MARK: Repos
+
+    private var reposCard: some View {
+        SettingsCard(title: "Repositories", symbol: "shippingbox.fill") {
+            VStack(alignment: .leading, spacing: 8) {
+                if state.repos.isEmpty {
+                    Text("No repos tracked yet.")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                } else {
+                    VStack(spacing: 5) {
+                        ForEach(state.repos) { repo in
+                            RepoChip(repo: repo) { state.removeRepo(repo) }
+                        }
+                    }
+                }
+
+                HStack(spacing: 6) {
+                    TextField("owner", text: $newOwner)
+                        .textFieldStyle(.roundedBorder)
+                        .font(.system(size: 12, design: .monospaced))
+                    Text("/").foregroundStyle(.secondary)
+                    TextField("repo", text: $newName)
+                        .textFieldStyle(.roundedBorder)
+                        .font(.system(size: 12, design: .monospaced))
+                        .onSubmit(addRepo)
+                    Button("Add", action: addRepo)
+                        .buttonStyle(BrandButton())
+                        .disabled(repoIsEmpty)
+                }
             }
         }
+    }
+
+    private var repoIsEmpty: Bool {
+        newOwner.trimmingCharacters(in: .whitespaces).isEmpty
+            || newName.trimmingCharacters(in: .whitespaces).isEmpty
+    }
+
+    private func addRepo() {
+        guard !repoIsEmpty else { return }
+        state.addRepo(owner: newOwner, name: newName)
+        newOwner = ""
+        newName = ""
+    }
+
+    // MARK: Options
+
+    private var optionsCard: some View {
+        SettingsCard(title: "Options", symbol: "slider.horizontal.3") {
+            VStack(alignment: .leading, spacing: 10) {
+                Toggle(isOn: Binding(
+                    get: { state.launchAtLogin },
+                    set: { state.setLaunchAtLogin($0) }
+                )) {
+                    Text("Launch at login")
+                        .font(.system(size: 12))
+                }
+                .toggleStyle(.switch)
+                .tint(Theme.brand)
+                .controlSize(.small)
+
+                if let error = state.lastError {
+                    HStack(alignment: .top, spacing: 6) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.system(size: 10))
+                            .foregroundStyle(Theme.failure)
+                            .padding(.top, 1)
+                        Text(error)
+                            .font(.system(size: 10.5))
+                            .foregroundStyle(Theme.failure)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+
+                if state.hasToken {
+                    Button("Done") {
+                        withAnimation(.easeInOut(duration: 0.18)) { showingSettings = false }
+                    }
+                    .buttonStyle(BrandButton())
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Reusable pieces
+
+/// A titled container that groups related settings with a faint card surface.
+private struct SettingsCard<Content: View>: View {
+    let title: String
+    let symbol: String
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            Label {
+                Text(title)
+                    .font(.system(size: 11, weight: .bold))
+                    .tracking(0.4)
+                    .textCase(.uppercase)
+            } icon: {
+                Image(systemName: symbol)
+                    .font(.system(size: 10))
+                    .foregroundStyle(Theme.brand)
+            }
+            .foregroundStyle(.secondary)
+
+            content
+        }
+        .padding(11)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(Color.primary.opacity(0.04))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .strokeBorder(Color.primary.opacity(0.06), lineWidth: 1)
+        )
+    }
+}
+
+private struct RepoChip: View {
+    let repo: TrackedRepo
+    let onDelete: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        HStack(spacing: 7) {
+            Image(systemName: "shippingbox")
+                .font(.system(size: 10))
+                .foregroundStyle(.tertiary)
+            Text(repo.slug)
+                .font(.system(size: 11.5, weight: .medium, design: .monospaced))
+                .lineLimit(1)
+                .truncationMode(.middle)
+            Spacer(minLength: 4)
+            Button(action: onDelete) {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.system(size: 12))
+                    .foregroundStyle(hovering ? AnyShapeStyle(Theme.failure) : AnyShapeStyle(.tertiary))
+            }
+            .buttonStyle(.plain)
+            .help("Stop tracking")
+        }
+        .padding(.horizontal, 9)
+        .padding(.vertical, 6)
+        .background(
+            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                .fill(Color.primary.opacity(0.05))
+        )
+        .onHover { hovering = $0 }
+        .animation(.easeOut(duration: 0.12), value: hovering)
+    }
+}
+
+/// Brand-colored filled button used for primary actions.
+private struct BrandButton: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 5)
+            .background(
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .fill(Theme.brandGradient)
+            )
+            .opacity(isEnabled ? (configuration.isPressed ? 0.8 : 1) : 0.4)
+            .scaleEffect(configuration.isPressed ? 0.97 : 1)
+            .animation(.easeOut(duration: 0.1), value: configuration.isPressed)
     }
 }

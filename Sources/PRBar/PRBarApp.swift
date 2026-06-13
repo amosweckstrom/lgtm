@@ -10,10 +10,10 @@ struct PRBarApp: App {
                 .environmentObject(state)
                 .onAppear { state.start() }
         } label: {
-            // Icon + review-request count badge.
+            // Icon + review-request count badge. Filled glyph when reviews wait.
             let count = state.reviewRequestedTotal
             if count > 0 {
-                Label("\(count)", systemImage: "checklist")
+                Label("\(count)", systemImage: "checklist.checked")
             } else {
                 Image(systemName: "checklist")
             }
