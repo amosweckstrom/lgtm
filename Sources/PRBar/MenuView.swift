@@ -18,7 +18,7 @@ struct MenuView: View {
 
             if showingSettings || !state.hasToken {
                 SettingsView(showingSettings: $showingSettings)
-                    .frame(maxHeight: 470)
+                    .frame(maxHeight: 600)
             } else {
                 content
             }
@@ -51,7 +51,7 @@ struct MenuView: View {
                 }
                 .padding(.vertical, 12)
             }
-            .frame(maxHeight: 480)
+            .frame(maxHeight: 600)
         }
     }
 }
