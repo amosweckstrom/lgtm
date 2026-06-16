@@ -36,7 +36,7 @@ enum AIReview {
     @discardableResult
     static func startComments(pr: PullRequest, repo: TrackedRepo,
                               terminalBundleID: String, agentInvocation: String) -> Bool {
-        guard let local = repo.localPath, !local.isEmpty else { return false }
+        guard let local = usableLocalPath(for: repo) else { return false }
 
         let prompt = commentsPrompt(number: pr.number)
         let tmp = FileManager.default.temporaryDirectory
@@ -56,14 +56,22 @@ enum AIReview {
         return true
     }
 
+    /// Single launchability predicate for the worktree-backed actions: the
+    /// repo's configured local clone path, trimmed, or nil when none is set.
+    /// `startComments` and `openWorktree` return false exactly when this is nil
+    /// (nothing launched), so the UI can prompt the user to set a path.
+    private static func usableLocalPath(for repo: TrackedRepo) -> String? {
+        guard let trimmed = repo.localPath?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !trimmed.isEmpty else { return nil }
+        return trimmed
+    }
+
     /// Conventional path of the dedicated worktree LGTM creates for a PR:
     /// `~/.lgtm/worktrees/<owner>-<name>-pr-<number>`. The branch may instead be
     /// checked out in the main clone or a prior worktree — `ensureWorktreeShell`
     /// resolves that at launch; this is only the default creation location.
     static func worktreeURL(pr: PullRequest, repo: TrackedRepo) -> URL {
-        let slug = "\(repo.owner)-\(repo.name)"
-        return FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".lgtm/worktrees/\(slug)-pr-\(pr.number)")
+        Worktrees.path(for: pr, in: repo)
     }
 
     /// Opens the PR's worktree in VS Code, creating it the same way
@@ -75,7 +83,7 @@ enum AIReview {
     @discardableResult
     static func openWorktree(pr: PullRequest, repo: TrackedRepo,
                              terminalBundleID: String) -> Bool {
-        guard let local = repo.localPath, !local.isEmpty else { return false }
+        guard let local = usableLocalPath(for: repo) else { return false }
 
         let existing = worktreeURL(pr: pr, repo: repo)
         if FileManager.default.fileExists(atPath: existing.path) {
@@ -112,8 +120,7 @@ enum AIReview {
     private static func ensureWorktreeShell(pr: PullRequest, repo: TrackedRepo,
                                             local: String) -> String {
         let n = pr.number
-        let slug = "\(repo.owner)-\(repo.name)"
-        let wt = "$HOME/.lgtm/worktrees/\(slug)-pr-\(n)"
+        let wt = Worktrees.shellPath(for: pr, in: repo)
         // awk over `git worktree list --porcelain` to find where $BR is checked out.
         let findTree = "awk -v b=\"refs/heads/$BR\" '/^worktree /{wt=substr($0,10)} "
             + "$0==\"branch \"b{print wt; exit}'"
@@ -121,14 +128,14 @@ enum AIReview {
             + "BR=$(gh pr view \(n) --json headRefName -q .headRefName) && "
             + "TARGET=$(git worktree list --porcelain | \(findTree)) && "
             + "if [ -z \"$TARGET\" ]; then "
-            +   "TARGET=\"\(wt)\" && mkdir -p \"$HOME/.lgtm/worktrees\" && "
+            +   "TARGET=\"\(wt)\" && mkdir -p \"\(Worktrees.rootShell)\" && "
             +   "{ [ -d \"$TARGET\" ] || git worktree add --detach \"$TARGET\"; } && "
             +   "cd \"$TARGET\" && gh pr checkout \(n); "
             + "else echo \"[lgtm] '$BR' is already checked out at $TARGET — using it\" && cd \"$TARGET\"; fi && "
             // Run a machine-local, per-repo setup hook if one exists (e.g. symlink
             // env files, install deps). Non-fatal: a failing or missing hook must
             // never block the action.
-            + "{ HOOK=\"$HOME/.lgtm/hooks/\(slug).sh\"; [ -x \"$HOOK\" ] && "
+            + "{ HOOK=\"$HOME/.lgtm/hooks/\(Worktrees.slug(for: repo)).sh\"; [ -x \"$HOOK\" ] && "
             +   "echo \"[lgtm] running setup hook $HOOK\" && \"$HOOK\" \"$TARGET\"; true; }"
     }
 

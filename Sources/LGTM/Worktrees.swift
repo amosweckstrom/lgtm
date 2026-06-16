@@ -2,6 +2,43 @@ import Foundation
 
 /// Housekeeping for the PR worktrees LGTM creates under `~/.lgtm/worktrees`.
 enum Worktrees {
+    // MARK: - Path convention (single source of truth)
+    //
+    // The convention `~/.lgtm/worktrees/<owner>-<name>-pr-<number>` lives ONLY
+    // here. Both `AIReview` (Swift URL + the worktree-creating bash) and the
+    // `cleanupClosed` script below derive their paths from these members, so the
+    // Swift fast-path and the shell that actually creates the directory can't
+    // drift apart.
+
+    /// Shell form of the worktrees root (`$HOME/.lgtm/worktrees`).
+    static let rootShell = "$HOME/.lgtm/worktrees"
+
+    /// Swift form of the worktrees root (`~/.lgtm/worktrees`).
+    static let root: URL = FileManager.default.homeDirectoryForCurrentUser
+        .appendingPathComponent(".lgtm/worktrees")
+
+    /// Per-repo slug (`<owner>-<name>`). Doubles as the per-repo hook filename.
+    static func slug(for repo: TrackedRepo) -> String {
+        "\(repo.owner)-\(repo.name)"
+    }
+
+    /// Directory leaf for a PR's worktree: `<owner>-<name>-pr-<number>`.
+    static func dirName(for pr: PullRequest, in repo: TrackedRepo) -> String {
+        "\(slug(for: repo))-pr-\(pr.number)"
+    }
+
+    /// Swift URL of a PR's conventional worktree directory.
+    static func path(for pr: PullRequest, in repo: TrackedRepo) -> URL {
+        root.appendingPathComponent(dirName(for: pr, in: repo))
+    }
+
+    /// Shell form of a PR's conventional worktree directory.
+    static func shellPath(for pr: PullRequest, in repo: TrackedRepo) -> String {
+        "\(rootShell)/\(dirName(for: pr, in: repo))"
+    }
+
+    // MARK: - Cleanup
+
     /// Remove worktrees whose PR is merged or closed. Runs in the background.
     ///
     /// Safe by design:
@@ -29,8 +66,10 @@ enum Worktrees {
 
     private static let script = #"""
     set -u
-    ROOT="$HOME/.lgtm/worktrees"
+    ROOT="\#(rootShell)"
     [ -d "$ROOT" ] || exit 0
+    # Glob + parse match `dirName`'s "<owner>-<name>-pr-<number>" leaf: the
+    # "*-pr-*" glob finds worktree dirs and "${D##*-pr-}" extracts the number.
     for D in "$ROOT"/*-pr-*; do
       [ -d "$D" ] || continue
       N="${D##*-pr-}"

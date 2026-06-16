@@ -352,8 +352,7 @@ private struct ReviewWithAIButton: View {
 
     var body: some View {
         Button {
-            let invocation = Agents.invocation(for: state.agentID, customCommand: state.customAgentCommand)
-                ?? Agents.known.first { $0.id == Agents.defaultID }?.command ?? "claude"
+            let invocation = Agents.resolvedInvocation(for: state.agentID, customCommand: state.customAgentCommand)
             AIReview.start(pr: pr, terminalBundleID: state.terminalBundleID, agentInvocation: invocation)
         } label: {
             Image(systemName: "sparkles")
@@ -423,12 +422,10 @@ private struct OpenWorktreeButton: View {
 
     var body: some View {
         Button {
-            guard repo.localPath?.isEmpty == false else {
+            if !AIReview.openWorktree(pr: pr, repo: repo,
+                                      terminalBundleID: state.terminalBundleID) {
                 promptForRepoPath(repo.slug)
-                return
             }
-            AIReview.openWorktree(pr: pr, repo: repo,
-                                  terminalBundleID: state.terminalBundleID)
         } label: {
             Image(systemName: "chevron.left.forwardslash.chevron.right")
                 .font(.system(size: 12, weight: .semibold))
@@ -454,16 +451,13 @@ private struct AddressCommentsButton: View {
 
     var body: some View {
         Button {
-            guard item.repo.localPath?.isEmpty == false else {
-                promptForRepoPath(item.repo.slug)
-                return
-            }
-            let invocation = Agents.invocation(for: state.agentID, customCommand: state.customAgentCommand)
-                ?? Agents.known.first { $0.id == Agents.defaultID }?.command ?? "claude"
-            AIReview.startComments(
+            let invocation = Agents.resolvedInvocation(for: state.agentID, customCommand: state.customAgentCommand)
+            if !AIReview.startComments(
                 pr: item.pr, repo: item.repo,
                 terminalBundleID: state.terminalBundleID,
-                agentInvocation: invocation)
+                agentInvocation: invocation) {
+                promptForRepoPath(item.repo.slug)
+            }
         } label: {
             Image(systemName: "wand.and.stars")
                 .font(.system(size: 12, weight: .semibold))

@@ -65,43 +65,18 @@ final class AppState: ObservableObject {
     }
 
     /// Total number of PRs awaiting the user's review across all repos.
-    var reviewRequestedTotal: Int {
-        results.reduce(0) { $0 + $1.reviewRequestedCount }
-    }
+    var reviewRequestedTotal: Int { Attention.reviewRequestedTotal(in: results) }
 
     /// Your authored PRs that a reviewer has approved or requested changes on,
     /// across all repos. Changes-requested sort first (more to do), then approved.
-    var respondedPRs: [AttentionPR] {
-        results
-            .flatMap { result in
-                result.pullRequests
-                    .filter { $0.awaitingMyResponse }
-                    .map { AttentionPR(repo: result.repo, pr: $0) }
-            }
-            .sorted { $0.pr.displayReviewState < $1.pr.displayReviewState }
-    }
+    var respondedPRs: [AttentionPR] { Attention.respondedPRs(in: results) }
 
     /// All of your open PRs across tracked repos, ordered by what needs action
     /// first: changes requested, then approved, then still awaiting review.
-    var myPRs: [AttentionPR] {
-        results
-            .flatMap { result in
-                result.pullRequests
-                    .filter { $0.authoredByMe }
-                    .map { AttentionPR(repo: result.repo, pr: $0) }
-            }
-            .sorted { lhs, rhs in
-                if lhs.pr.displayReviewState != rhs.pr.displayReviewState {
-                    return lhs.pr.displayReviewState < rhs.pr.displayReviewState
-                }
-                return lhs.pr.number > rhs.pr.number
-            }
-    }
+    var myPRs: [AttentionPR] { Attention.myPRs(in: results) }
 
     /// Everything that wants the user's attention: reviews owed + responses received.
-    var attentionTotal: Int {
-        reviewRequestedTotal + respondedPRs.count
-    }
+    var attentionTotal: Int { Attention.attentionTotal(in: results) }
 
     func start() {
         Task { await refresh() }

@@ -90,7 +90,18 @@ struct GitHubClient: Sendable {
         """
         let variables: [String: Any] = ["owner": repo.owner, "name": repo.name]
         let json = try await post(query: query, variables: variables)
+        return try Self.decodePullRequests(from: json, viewerLogin: viewerLogin)
+    }
 
+    // MARK: - Decoding
+
+    /// Pure, synchronous decode of a GitHub GraphQL pull-requests response into
+    /// `[PullRequest]`. Performs all the derivation (author/avatar/check rollup,
+    /// case-insensitive review-requested-from-me, pending-request flag,
+    /// authored-by-me, and the most-recent review-requested timestamp) and the
+    /// pin-on-top stable sort. No networking, so it is exercised directly in
+    /// tests with fixture dictionaries.
+    static func decodePullRequests(from json: [String: Any], viewerLogin: String) throws -> [PullRequest] {
         guard let data = json["data"] as? [String: Any] else {
             throw GitHubError.decoding("missing data")
         }

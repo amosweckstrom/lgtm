@@ -36,4 +36,12 @@ enum Agents {
         }
         return known.first { $0.id == id }?.command ?? known.first { $0.id == defaultID }?.command
     }
+
+    /// The total (never-nil) invocation resolver: like `invocation(for:customCommand:)`
+    /// but always yields a runnable command. The custom-but-blank case and any
+    /// unknown id fall back to the default agent's command.
+    static func resolvedInvocation(for id: String, customCommand: String) -> String {
+        invocation(for: id, customCommand: customCommand)
+            ?? known.first { $0.id == defaultID }?.command ?? defaultID
+    }
 }
